@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-accent: #7CFF4D;
+  --color-accent-blue: #4F8CFF;
+  --color-surface: #FAFAFA;
+  --color-ink: #0A0A0A;
+  --color-muted: #6B7280;
+
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04);
+}
+
+html, body {
+  font-family: var(--font-body);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.dark {
+  --color-surface: #0A0A0A;
+  --color-ink: #FAFAFA;
+  --color-muted: #9CA3AF;
+}
+
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+.dark .glass {
+  background: rgba(20,20,20,0.7);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.card {
+  background: white;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  border: 1px solid #f3f4f6;
+}
+
+.dark .card {
+  background: #161616;
+  border-color: #262626;
+}
+
+::selection {
+  background: #7CFF4D;
+  color: #0A0A0A;
+}
