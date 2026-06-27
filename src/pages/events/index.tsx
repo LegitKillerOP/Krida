@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Calendar, Filter } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { SPORTS, type SportSlug } from '@/lib/constants'
-import { mockEvents } from '@/services/mock'
+import { getEvents } from '@/services/db'
 import { Section, SectionHeader, EmptyState } from '@/components/ui'
 import { EventCard } from '@/components/event-card'
 import { todayISO } from '@/lib/utils'
@@ -29,8 +30,13 @@ export default function EventsIndex() {
   const [sport, setSport] = useState<SportSlug | 'all'>('all')
   const [date, setDate] = useState<string>('all')
 
-  const events = useMemo(() => {
-    return mockEvents
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ['events'],
+    queryFn: getEvents,
+  })
+
+  const filtered = useMemo(() => {
+    return events
       .filter((e) => e.status !== 'cancelled')
       .filter((e) => {
         if (sport !== 'all' && e.sport !== sport) return false
@@ -39,12 +45,12 @@ export default function EventsIndex() {
         return true
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-  }, [sport, date])
+  }, [events, sport, date])
 
   const dates = useMemo(() => {
-    const set = new Set(mockEvents.map((e) => e.date))
+    const set = new Set(events.map((e) => e.date))
     return Array.from(set).sort()
-  }, [])
+  }, [events])
 
   return (
     <div className="pb-24">
@@ -67,9 +73,8 @@ export default function EventsIndex() {
             <Filter className="h-4 w-4" />
             <span className="hidden sm:inline">Filters</span>
           </div>
-          
+
           <div className="flex flex-1 flex-wrap items-center gap-3">
-            {/* FIXED: Extracted 'text-ink' classes and mapped direct child element properties to support Cross-Browser rendering engine constraints */}
             <select
               value={sport}
               onChange={(e) => setSport(e.target.value as SportSlug | 'all')}
@@ -86,7 +91,6 @@ export default function EventsIndex() {
 
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted" />
-              {/* FIXED: Re-aligned classes to match the custom dropdown structure perfectly */}
               <select
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -106,10 +110,16 @@ export default function EventsIndex() {
         </motion.div>
 
         <p className="mt-4 text-sm text-ink font-medium">
-          {events.length} {events.length === 1 ? 'event' : 'events'} found
+          {filtered.length} {filtered.length === 1 ? 'event' : 'events'} found
         </p>
 
-        {events.length === 0 ? (
+        {isLoading ? (
+          <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-64 animate-pulse rounded-2xl bg-ink/5 dark:bg-surface/5" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={Calendar}
             title="No events match your filters"
@@ -117,7 +127,7 @@ export default function EventsIndex() {
           />
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {events.map((e) => (
+            {filtered.map((e) => (
               <EventCard key={e.id} event={e} />
             ))}
           </div>

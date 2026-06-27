@@ -9,22 +9,23 @@ import {
   Zap,
   Activity,
   BadgeCheck,
-  CreditCard,
-  Smartphone,
-  Landmark,
-  Wallet,
   ShieldCheck,
   Users,
   Minus,
   Plus,
   CalendarDays,
+  Wallet,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 
 import { useBooking } from '@/store/booking'
 import { useAuth } from '@/store/auth'
 import { SPORTS, type SportSlug } from '@/lib/constants'
-import { mockVenues } from '@/services/mock'
+import { getVenues, createBooking } from '@/services/db'
+import { sendBookingReceipt } from '@/services/mail'
 import { Button, Badge, EmptyState } from '@/components/ui'
 import { cn, formatPrice, todayISO } from '@/lib/utils'
 import { Stepper } from '@/components/booking/stepper'
@@ -42,13 +43,6 @@ const SPORT_ICONS: Record<string, LucideIcon> = {
   running: Activity,
 }
 
-const PAYMENT_METHODS = [
-  { id: 'upi', label: 'UPI', icon: Smartphone, desc: 'Pay via any UPI app' },
-  { id: 'card', label: 'Cards', icon: CreditCard, desc: 'Credit / Debit card' },
-  { id: 'netbanking', label: 'Net Banking', icon: Landmark, desc: 'Internet banking' },
-  { id: 'cash', label: 'Cash at Venue', icon: Wallet, desc: 'Pay when you arrive' },
-] as const
-
 const CONVENIENCE_FEE = 49
 
 function generateBookingId() {
@@ -60,12 +54,14 @@ function generateBookingId() {
   return id
 }
 
+type PaymentStatus = 'idle' | 'confirmed' | 'failed'
+
 export default function BookingPage() {
   const [searchParams] = useSearchParams()
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState<1 | -1>(1)
-  const [paymentMethod, setPaymentMethod] = useState<string>('upi')
   const [bookingId, setBookingId] = useState<string | null>(null)
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('idle')
 
   const sport = useBooking((s) => s.sport)
   const venue = useBooking((s) => s.venue)
@@ -81,8 +77,15 @@ export default function BookingPage() {
   const setPlayers = useBooking((s) => s.setPlayers)
 
   const isAuthenticated = useAuth((s) => s.isAuthenticated)
+  const user = useAuth((s) => s.user)
 
   const urlSport = searchParams.get('sport') as SportSlug | null
+  const urlVenue = searchParams.get('venue')
+
+  const { data: allVenues = [] } = useQuery({
+    queryKey: ['venues'],
+    queryFn: getVenues,
+  })
 
   useEffect(() => {
     if (urlSport && SPORTS.some((s) => s.slug === urlSport)) {
@@ -91,14 +94,25 @@ export default function BookingPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (urlVenue && allVenues.some((v) => v.id === urlVenue)) {
+      const v = allVenues.find((v) => v.id === urlVenue)
+      if (v) {
+        setSport(v.sport)
+        setVenue(v.id)
+        setStep(2)
+      }
+    }
+  }, [urlVenue, allVenues])
+
   const filteredVenues = useMemo(
-    () => (sport ? mockVenues.filter((v) => v.sport === sport) : []),
-    [sport],
+    () => (sport ? allVenues.filter((v) => v.sport === sport) : []),
+    [sport, allVenues],
   )
 
   const selectedVenue = useMemo(
-    () => mockVenues.find((v) => v.id === venue) ?? null,
-    [venue],
+    () => allVenues.find((v) => v.id === venue) ?? null,
+    [venue, allVenues],
   )
 
   const selectedSportMeta = useMemo(
@@ -129,16 +143,43 @@ export default function BookingPage() {
       case 5:
         return true
       case 6:
-        return paymentMethod.length > 0
+        return paymentStatus === 'confirmed'
       default:
         return true
     }
   }
 
+  async function handleConfirmBooking() {
+    if (!user || !selectedVenue || !slot) return
+
+    setPaymentStatus('confirmed')
+    const id = generateBookingId()
+
+    // Create booking in database with offline/cash payment
+    await createBooking({
+      userId: user.id,
+      venueId: selectedVenue.id,
+      date,
+      slot,
+      hours,
+      price: grandTotal,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      paymentMethod: 'cash',
+    })
+
+    setBookingId(id)
+
+    // Send receipt email (fire and forget — handled by Firebase extension)
+    sendBookingReceipt(
+      { id, userId: user.id, venueId: selectedVenue.id, date, slot, hours, price: grandTotal, status: 'pending', createdAt: new Date().toISOString(), paymentMethod: 'cash' },
+      selectedVenue,
+      user
+    ).catch((err) => console.error('Email failed:', err))
+  }
+
   function goNext() {
-    if (step === 6) {
-      setBookingId(generateBookingId())
-    }
+    if (step === 6 && paymentStatus !== 'confirmed') return
     setDirection(1)
     setStep((s) => Math.min(s + 1, STEPS.length - 1))
   }
@@ -187,6 +228,7 @@ export default function BookingPage() {
               time: slot,
               price: grandTotal,
             }}
+            userEmail={user?.email}
           />
         </div>
       </div>
@@ -250,7 +292,7 @@ export default function BookingPage() {
                   {SPORTS.map((s) => {
                     const Icon = SPORT_ICONS[s.slug] ?? Volleyball
                     const isSelected = sport === s.slug
-                    const venueCount = mockVenues.filter((v) => v.sport === s.slug).length
+                    const venueCount = allVenues.filter((v) => v.sport === s.slug).length
 
                     return (
                       <motion.button
@@ -259,7 +301,6 @@ export default function BookingPage() {
                         whileHover={{ y: -4 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handleSelectSport(s.slug)}
-                        // FIXED: Replaced dynamic dynamic background color with explicit static class assignment
                         className={cn(
                           'group relative flex flex-col items-start rounded-2xl border p-6 text-left transition-all duration-200 shadow-sm bg-neutral-900 text-white',
                           isSelected
@@ -277,7 +318,6 @@ export default function BookingPage() {
                         >
                           <Icon className="h-6 w-6" />
                         </div>
-                        {/* FIXED: Formatted text tracking to always evaluate as absolute white */}
                         <h3 className="font-heading text-lg font-semibold text-white">
                           {s.name}
                         </h3>
@@ -336,7 +376,6 @@ export default function BookingPage() {
                           whileHover={{ y: -4 }}
                           whileTap={{ scale: 0.98 }}
                           onClick={() => handleSelectVenue(v.id)}
-                          // FIXED: Overridden standard system layout with explicit black card styling
                           className={cn(
                             'group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-all duration-200 bg-neutral-900 text-white',
                             isSelected
@@ -357,7 +396,6 @@ export default function BookingPage() {
                             <h3 className="font-heading text-base font-semibold text-white">
                               {v.name}
                             </h3>
-                            {/* FIXED: Venue fallback settings explicitly bound to white colors */}
                             <div className="flex items-center gap-2 text-sm text-neutral-300">
                               <span>{v.address}</span>
                             </div>
@@ -574,80 +612,91 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* STEP 6: Payment */}
+            {/* STEP 6: Confirm & Pay at Venue */}
             {step === 6 && (
               <div className="space-y-8">
                 <div>
                   <h1 className="font-heading text-3xl font-bold sm:text-4xl text-ink dark:text-surface">
-                    Payment
+                    Confirm Booking
                   </h1>
                   <p className="mt-2 text-muted">
-                    Choose your preferred payment method.
+                    Pay at the venue when you arrive.
                   </p>
                 </div>
 
-                <div className="max-w-lg space-y-3">
-                  {PAYMENT_METHODS.map((method) => {
-                    const Icon = method.icon
-                    const isSelected = paymentMethod === method.id
-
-                    return (
-                      <button
-                        key={method.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(method.id)}
-                        // FIXED: Rebuilt payment cards layout to maintain strict white dark states
-                        className={cn(
-                          'flex w-full items-center gap-4 rounded-2xl border p-5 text-left transition-all duration-200 bg-neutral-900 text-white',
-                          isSelected
-                            ? 'border-accent ring-2 ring-accent'
-                            : 'border-surface/10 hover:border-surface/25',
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'flex h-11 w-11 items-center justify-center rounded-xl transition-colors',
-                            isSelected
-                              ? 'bg-accent text-ink'
-                              : 'bg-surface/10 text-surface',
-                          )}
-                        >
-                          <Icon className="h-5 w-5" />
+                <div className="max-w-lg space-y-6">
+                  {/* Payment Summary */}
+                  <div className="rounded-2xl border border-ink/10 bg-white p-6 dark:border-surface/10 dark:bg-neutral-900">
+                    <h3 className="font-heading text-base font-semibold text-ink dark:text-surface">Payment Summary</h3>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted">Venue price ({hours} hr{hours > 1 ? 's' : ''})</span>
+                        <span className="font-medium text-ink dark:text-surface">{formatPrice(totalPrice)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted">Convenience fee</span>
+                        <span className="font-medium text-ink dark:text-surface">{formatPrice(CONVENIENCE_FEE)}</span>
+                      </div>
+                      <div className="border-t border-ink/10 pt-3 dark:border-surface/10">
+                        <div className="flex items-center justify-between">
+                          <span className="font-heading text-base font-semibold text-ink dark:text-surface">Total</span>
+                          <span className="font-heading text-xl font-bold text-accent">{formatPrice(grandTotal)}</span>
                         </div>
-                        <div className="flex-1">
-                          <p className="font-heading text-sm font-semibold text-white">
-                            {method.label}
-                          </p>
-                          <p className="text-xs text-neutral-400">{method.desc}</p>
-                        </div>
-                        <div
-                          className="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all"
-                          style={{ borderColor: isSelected ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.2)' }}
-                        >
-                          {isSelected && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="h-2 w-2 rounded-full bg-accent"
-                            />
-                          )}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <ShieldCheck className="h-4 w-4 text-accent" />
-                  <span>Secure payment powered by KRIDA</span>
-                </div>
+                  {/* Payment Status */}
+                  {paymentStatus === 'confirmed' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/30"
+                    >
+                      <CheckCircle className="h-5 w-5 text-emerald-600" />
+                      <div>
+                        <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Booking confirmed!</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Pay {formatPrice(grandTotal)} at the venue</p>
+                      </div>
+                    </motion.div>
+                  )}
 
-                <div className="max-w-lg rounded-xl border border-ink/10 bg-ink/5 p-4 dark:border-surface/10 dark:bg-surface/5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted">Total payable</span>
-                    <span className="font-heading text-lg font-bold text-accent">
-                      {formatPrice(grandTotal)}
-                    </span>
+                  {paymentStatus === 'failed' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30"
+                    >
+                      <XCircle className="h-5 w-5 text-red-600" />
+                      <div>
+                        <p className="text-sm font-medium text-red-800 dark:text-red-200">Something went wrong</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">Please try again.</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Confirm Button */}
+                  {paymentStatus !== 'confirmed' && (
+                    <button
+                      type="button"
+                      onClick={handleConfirmBooking}
+                      className="flex w-full items-center justify-center gap-3 rounded-2xl bg-accent px-6 py-4 text-lg font-semibold text-ink transition-all hover:bg-accent/90"
+                    >
+                      <Wallet className="h-5 w-5" />
+                      Confirm & Pay at Venue
+                    </button>
+                  )}
+
+                  {/* Info */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>How it works:</strong> Reserve your slot now and pay when you arrive at the venue. You'll receive a receipt via email.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted">
+                    <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                    <span>Booking confirmed instantly — no online payment needed</span>
                   </div>
                 </div>
               </div>
@@ -676,7 +725,7 @@ export default function BookingPage() {
               disabled={!canAdvance()}
               className="gap-2"
             >
-              {step === STEPS.length - 2 ? 'Confirm & Pay' : 'Continue'}
+              {step === STEPS.length - 2 ? 'Done' : step === 6 ? 'Skip' : 'Continue'}
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

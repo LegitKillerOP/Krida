@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { SlidersHorizontal, ArrowUpDown } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { SPORTS, type SportSlug } from '@/lib/constants'
-import { mockVenues } from '@/services/mock'
+import { getVenues } from '@/services/db'
 import { Section, SectionHeader, EmptyState } from '@/components/ui'
 import { VenueCard } from '@/components/venue-card'
 import { cn } from '@/lib/utils'
@@ -22,13 +23,18 @@ export default function VenuesIndex() {
   const [maxPrice, setMaxPrice] = useState<number>(2000)
   const [sort, setSort] = useState<SortKey>('rating')
 
+  const { data: venues = [], isLoading } = useQuery({
+    queryKey: ['venues'],
+    queryFn: getVenues,
+  })
+
   const cities = useMemo(() => {
-    const set = new Set(mockVenues.map((v) => v.city))
+    const set = new Set(venues.map((v) => v.city))
     return Array.from(set)
-  }, [])
+  }, [venues])
 
   const filtered = useMemo(() => {
-    let list = mockVenues.filter((v) => {
+    let list = venues.filter((v) => {
       if (sport !== 'all' && v.sport !== sport) return false
       if (city !== 'all' && v.city !== city) return false
       if (v.price > maxPrice) return false
@@ -50,7 +56,7 @@ export default function VenuesIndex() {
     })
 
     return list
-  }, [sport, city, maxPrice, sort])
+  }, [venues, sport, city, maxPrice, sort])
 
   return (
     <div className="pb-24">
@@ -75,7 +81,6 @@ export default function VenuesIndex() {
           </div>
 
           <div className="flex flex-1 flex-wrap items-center gap-3">
-            {/* FIXED: Extracted 'text-ink' classes and mapped direct child element properties to support Cross-Browser rendering engine constraints */}
             <select
               value={sport}
               onChange={(e) => setSport(e.target.value as SportSlug | 'all')}
@@ -141,7 +146,13 @@ export default function VenuesIndex() {
           )}
         </div>
 
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className={cn('mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3')}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-80 animate-pulse rounded-2xl bg-ink/5 dark:bg-surface/5" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={SlidersHorizontal}
             title="No venues match your filters"

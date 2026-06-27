@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { MapPin, Star, ArrowLeft, Check, X as XIcon, Trophy, Target, Zap, Activity, HelpCircle } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { SPORTS } from '@/lib/constants'
-import { mockVenues, mockReviews } from '@/services/mock'
+import { getVenueById, getReviewsByVenue } from '@/services/db'
 import { Section, SectionHeader, Badge, Button, EmptyState } from '@/components/ui'
 import { cn, formatPrice, formatDate } from '@/lib/utils'
 
@@ -30,7 +31,28 @@ function buildSlots(slots: string[]) {
 
 export default function VenueDetailPage() {
   const { id } = useParams()
-  const venue = mockVenues.find((v) => v.id === id)
+
+  const { data: venue, isLoading: venueLoading } = useQuery({
+    queryKey: ['venue', id],
+    queryFn: () => getVenueById(id!),
+    enabled: !!id,
+  })
+
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['reviews', id],
+    queryFn: () => getReviewsByVenue(id!),
+    enabled: !!id,
+  })
+
+  if (venueLoading) {
+    return (
+      <div className="pb-24">
+        <Section className="pt-32">
+          <div className="h-96 animate-pulse rounded-3xl bg-ink/5 dark:bg-surface/5" />
+        </Section>
+      </div>
+    )
+  }
 
   if (!venue) {
     return (
@@ -49,18 +71,17 @@ export default function VenueDetailPage() {
 
   const sport = SPORT_BY_SLUG[venue.sport]
   const gradient = GRADIENTS[venue.sport] ?? 'from-zinc-900 to-zinc-800'
-  
+
   const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     Football: Trophy,
     Target: Target,
-    Badminton: Activity, 
+    Badminton: Activity,
     Zap: Zap,
     Activity: Activity
   }
   const IconComponent = iconMap[sport?.icon || ''] || HelpCircle
 
-  const reviews = mockReviews.filter((r) => r.venueId === venue.id)
-  const slots = buildSlots(venue.slots)
+  const slots = buildSlots(venue.slots ?? [])
 
   return (
     <div className="pb-32 lg:pb-24">
@@ -89,7 +110,7 @@ export default function VenueDetailPage() {
           )}
         >
           <IconComponent className="absolute -right-8 -top-8 h-56 w-56 text-white/10 sm:h-72 sm:w-72" />
-          
+
           <div className="relative z-10 flex w-full flex-wrap items-end justify-between gap-6">
             <div>
               <Badge variant="outline" className="border-white/20 bg-black/30 text-white backdrop-blur">
@@ -109,7 +130,7 @@ export default function VenueDetailPage() {
                 </span>
               </div>
             </div>
-            
+
             <div className="text-left lg:text-right">
               <p className="text-sm text-white/60">Starting from</p>
               <p className="font-heading text-3xl font-bold text-white sm:text-4xl">
@@ -139,7 +160,7 @@ export default function VenueDetailPage() {
           <div>
             <SectionHeader eyebrow="Facilities" title="What's available" align="left" />
             <div className="mt-4 flex flex-wrap gap-2">
-              {venue.facilities.map((f) => (
+              {venue.facilities?.map((f) => (
                 <Badge
                   key={f}
                   variant="outline"
@@ -162,7 +183,6 @@ export default function VenueDetailPage() {
                   disabled={s.state !== 'available'}
                   className={cn(
                     'rounded-xl border px-2 py-3 text-xs font-medium transition-colors',
-                    /* FIXED: Available slots now feature clear emerald background with white text */
                     s.state === 'available' &&
                       'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700',
                     s.state === 'unavailable' &&
@@ -175,7 +195,7 @@ export default function VenueDetailPage() {
                 </button>
               ))}
             </div>
-            
+
             {/* Slot Legend Keys */}
             <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted">
               <span className="flex items-center gap-1.5">
@@ -198,7 +218,7 @@ export default function VenueDetailPage() {
                 <MapPin className="mx-auto h-8 w-8 text-muted" />
                 <p className="mt-2 text-sm text-ink font-medium">{venue.address}</p>
                 <p className="text-xs text-muted mt-0.5">
-                  {venue.lat.toFixed(4)}, {venue.lng.toFixed(4)}
+                  {venue.lat?.toFixed(4)}, {venue.lng?.toFixed(4)}
                 </p>
               </div>
             </div>
@@ -246,7 +266,6 @@ export default function VenueDetailPage() {
         </div>
 
         {/* Sidebar Sticky Panel - Desktop Booking Interface layout card */}
-        {/* FIXED: Added a distinct dark container theme overlay with clean neutral border matching */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl text-white">
             <p className="text-sm text-neutral-400">Book this venue</p>
@@ -273,7 +292,6 @@ export default function VenueDetailPage() {
       </div>
 
       {/* Floating Bottom Navigation Bar - Mobile layout viewport support */}
-      {/* FIXED: Changed backdrop structure wrapper to full dark bg-neutral-900 with clear light text profiles */}
       <motion.div
         initial={{ y: 100 }}
         animate={{ y: 0 }}

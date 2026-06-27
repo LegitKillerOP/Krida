@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, X, MapPin, Calendar, Trophy } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { useSearch } from '@/store/search'
-import { mockVenues, mockEvents } from '@/services/mock'
+import { getVenues, getEvents } from '@/services/db'
 import { SPORTS } from '@/lib/constants'
 import { cn, formatPrice } from '@/lib/utils'
 
@@ -30,6 +31,16 @@ export function SearchDialog() {
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useClickOutside(close)
 
+  const { data: venues = [] } = useQuery({
+    queryKey: ['search-venues'],
+    queryFn: getVenues,
+  })
+
+  const { data: events = [] } = useQuery({
+    queryKey: ['search-events'],
+    queryFn: getEvents,
+  })
+
   useEffect(() => {
     if (!isOpen) return
     function handler(e: KeyboardEvent) {
@@ -45,22 +56,16 @@ export function SearchDialog() {
 
   const q = query.trim().toLowerCase()
 
-  const emptyResults = {
-    venues: [] as typeof mockVenues,
-    events: [] as typeof mockEvents,
-    sports: [] as (typeof SPORTS)[number][],
-  }
-
   const results = useMemo(() => {
-    if (!q) return emptyResults
-    const venues = mockVenues.filter(
+    if (!q) return { venues: [], events: [], sports: [] }
+    const filteredVenues = venues.filter(
       (v) =>
         v.name.toLowerCase().includes(q) ||
         v.address.toLowerCase().includes(q) ||
         v.city.toLowerCase().includes(q) ||
         v.sport.toLowerCase().includes(q),
     )
-    const events = mockEvents.filter(
+    const filteredEvents = events.filter(
       (e) =>
         e.title.toLowerCase().includes(q) ||
         e.venue.toLowerCase().includes(q) ||
@@ -69,8 +74,8 @@ export function SearchDialog() {
     const sports = SPORTS.filter(
       (s) => s.name.toLowerCase().includes(q) || s.slug.includes(q),
     )
-    return { venues, events, sports }
-  }, [q])
+    return { venues: filteredVenues, events: filteredEvents, sports }
+  }, [q, venues, events])
 
   const total = results.venues.length + results.events.length + results.sports.length
 
@@ -178,7 +183,7 @@ export function SearchDialog() {
                       className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink/5 dark:hover:bg-surface/10"
                     >
                       <img
-                        src={v.images[0]}
+                        src={v.images?.[0]}
                         alt={v.name}
                         className="h-12 w-12 rounded-lg object-cover"
                       />

@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
 import { MapPin, Star, Volleyball, Target, Zap, Activity } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Section, SectionHeader } from '@/components/ui'
-import { mockVenues } from '@/services/mock'
+import { getVenues } from '@/services/db'
 import { formatPrice } from '@/lib/utils'
 import type { SportSlug } from '@/lib/constants'
 
@@ -33,7 +34,12 @@ const item = {
 }
 
 export function Venues() {
-  const venues = mockVenues.slice(0, 6)
+  const { data: venues = [] } = useQuery({
+    queryKey: ['home-venues'],
+    queryFn: getVenues,
+  })
+
+  const displayVenues = venues.slice(0, 6)
 
   return (
     <Section id="venues">
@@ -49,7 +55,7 @@ export function Venues() {
         viewport={{ once: true, margin: '-80px' }}
         className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {venues.map((venue) => {
+        {displayVenues.map((venue) => {
           const Icon = SPORT_ICON[venue.sport] || Volleyball
           const gradient = GRADIENTS[venue.sport] || 'from-gray-200 to-gray-400'
           return (

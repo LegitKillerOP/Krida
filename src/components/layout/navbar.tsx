@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion'
-import { Search, Menu } from 'lucide-react'
+import { Search, Menu, Shield } from 'lucide-react'
 import { Logo } from './logo'
 import { MobileMenu } from './mobile-menu'
 import { SearchDialog } from './search-dialog'
 import { Button } from '@/components/ui'
-import { useAuth } from '@/store/auth'
+import { useAuth, logout } from '@/store/auth'
 import { useSearch } from '@/store/search'
 import { NAV_LINKS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 export function Navbar() {
   const { pathname } = useLocation()
   const { isAuthenticated, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const openSearch = useSearch((s) => s.open)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [hidden, setHidden] = useState(false)
@@ -62,6 +63,20 @@ export function Navbar() {
                 </Link>
               )
             })}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors',
+                  pathname === '/admin'
+                    ? 'bg-accent/10 text-accent'
+                    : 'text-muted hover:text-accent',
+                )}
+              >
+                <Shield className="h-3.5 w-3.5" />
+                Admin
+              </Link>
+            )}
           </nav>
 
           <div className="hidden items-center gap-2 md:flex">
@@ -75,19 +90,37 @@ export function Navbar() {
             </button>
 
             {isAuthenticated && user ? (
-              <Link
-                to="/profile"
-                className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-ink/5 dark:hover:bg-surface/10"
-              >
-                <img
-                  src={user.photo}
-                  alt={user.name}
-                  className="h-8 w-8 rounded-full object-cover"
-                />
-                <span className="text-sm font-medium">
-                  {user.name.split(' ')[0]}
-                </span>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-ink/5 dark:hover:bg-surface/10"
+                >
+                  {user.photo ? (
+                    <img
+                      src={user.photo}
+                      alt={user.name}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/10 text-sm font-semibold text-ink dark:bg-surface/10 dark:text-surface">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-sm font-medium">
+                    {user.name.split(' ')[0]}
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    window.location.href = '/'
+                  }}
+                  className="rounded-full px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:bg-ink/5 hover:text-ink dark:hover:bg-surface/10 dark:hover:text-surface"
+                >
+                  Logout
+                </button>
+              </div>
             ) : (
               <>
                 <Button variant="ghost" size="sm" asChild>

@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
-import { useAuth } from '@/store/auth'
+import { X, Shield } from 'lucide-react'
+import { useAuth, logout } from '@/store/auth'
 import { NAV_LINKS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +13,7 @@ interface MobileMenuProps {
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
   const { pathname } = useLocation()
   const { isAuthenticated, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
 
   return (
     <AnimatePresence>
@@ -52,25 +53,59 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
                 </Link>
               )
             })}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                onClick={onClose}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl px-4 py-3 text-2xl font-heading font-semibold transition-colors',
+                  pathname === '/admin'
+                    ? 'bg-accent text-ink'
+                    : 'text-surface/80 hover:bg-surface/10 hover:text-surface',
+                )}
+              >
+                <Shield className="h-5 w-5" />
+                Admin
+              </Link>
+            )}
           </nav>
 
           <div className="mt-auto flex flex-col gap-3 border-t border-surface/10 pt-6">
             {isAuthenticated && user ? (
-              <Link
-                to="/profile"
-                onClick={onClose}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-surface/10"
-              >
-                <img
-                  src={user.photo}
-                  alt={user.name}
-                  className="h-10 w-10 rounded-full object-cover"
-                />
-                <div>
-                  <p className="font-medium">{user.name}</p>
-                  <p className="text-sm text-surface/60">{user.email}</p>
-                </div>
-              </Link>
+              <>
+                <Link
+                  to="/profile"
+                  onClick={onClose}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-surface/10"
+                >
+                  {user.photo ? (
+                    <img
+                      src={user.photo}
+                      alt={user.name}
+                      className="h-10 w-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface/10 text-base font-semibold text-white">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium">{user.name}</p>
+                    <p className="text-sm text-surface/60">{user.email}</p>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    onClose()
+                    window.location.href = '/'
+                  }}
+                  className="rounded-xl border border-surface/20 px-4 py-3 text-center font-medium text-surface/80 hover:bg-surface/10"
+                >
+                  Logout
+                </button>
+              </>
             ) : (
               <>
                 <Link

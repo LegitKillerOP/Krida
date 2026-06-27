@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
 import { Star, Quote } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Section, SectionHeader } from '@/components/ui'
-import { mockReviews } from '@/services/mock'
+import { getReviewsByVenue } from '@/services/db'
 
 const container = {
   hidden: {},
@@ -14,7 +15,12 @@ const item = {
 }
 
 export function Testimonials() {
-  const reviews = mockReviews.slice(0, 3)
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['testimonials'],
+    queryFn: () => getReviewsByVenue('v_001'),
+  })
+
+  const displayReviews = reviews.slice(0, 3)
 
   return (
     <Section id="testimonials">
@@ -30,7 +36,7 @@ export function Testimonials() {
         viewport={{ once: true, margin: '-80px' }}
         className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
       >
-        {reviews.map((review) => (
+        {displayReviews.map((review) => (
           <motion.div
             key={review.id}
             variants={item}

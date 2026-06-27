@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { CheckCircle, Calendar, MapPin, Clock, ArrowRight, Home } from 'lucide-react'
+import { CheckCircle, Calendar, MapPin, Clock, ArrowRight, Home, Download, Mail, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { formatPrice } from '@/lib/utils'
 
@@ -13,9 +13,50 @@ interface ConfirmationProps {
     time: string
     price: number
   }
+  userEmail?: string
 }
 
-export function Confirmation({ booking }: ConfirmationProps) {
+export function Confirmation({ booking, userEmail }: ConfirmationProps) {
+  function handleDownloadReceipt() {
+    const separator = '═'.repeat(48)
+    const line = '─'.repeat(48)
+    const text = `
+${separator}
+              KRIDA — BOOKING RECEIPT
+${separator}
+
+Booking ID:    ${booking.id}
+Date:          ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+
+─── VENUE ─────────────────────────────────────
+Venue:         ${booking.venueName}
+Sport:         ${booking.sport.charAt(0).toUpperCase() + booking.sport.slice(1)}
+
+─── BOOKING DETAILS ───────────────────────────
+Date:          ${new Date(booking.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+Time:          ${booking.time}
+
+─── PAYMENT ───────────────────────────────────
+Amount:        ${formatPrice(booking.price)}
+Payment ID:    ${booking.id}
+Status:        CONFIRMED
+
+${line}
+Thank you for booking with KRIDA!
+For support: support@krida.app
+${separator}
+`
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `KRIDA-Receipt-${booking.id}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -103,7 +144,7 @@ export function Confirmation({ booking }: ConfirmationProps) {
           <Calendar className="h-4 w-4 text-muted" />
           <div className="text-left">
             <p className="text-xs text-muted">Date</p>
-            <p className="text-sm font-medium">{booking.date}</p>
+            <p className="text-sm font-medium">{new Date(booking.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
           </div>
         </div>
 
@@ -112,6 +153,14 @@ export function Confirmation({ booking }: ConfirmationProps) {
           <div className="text-left">
             <p className="text-xs text-muted">Time</p>
             <p className="text-sm font-medium">{booking.time}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Wallet className="h-4 w-4 text-muted" />
+          <div className="text-left">
+            <p className="text-xs text-muted">Payment</p>
+            <p className="text-sm font-medium">Pay at Venue</p>
           </div>
         </div>
 
@@ -125,6 +174,19 @@ export function Confirmation({ booking }: ConfirmationProps) {
         </div>
       </motion.div>
 
+      {/* Email notification */}
+      {userEmail && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.95 }}
+          className="mt-4 flex items-center gap-2 text-sm text-muted"
+        >
+          <Mail className="h-4 w-4 text-accent" />
+          <span>Receipt sent to <span className="font-medium text-ink dark:text-surface">{userEmail}</span></span>
+        </motion.div>
+      )}
+
       {/* CTAs */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -132,15 +194,18 @@ export function Confirmation({ booking }: ConfirmationProps) {
         transition={{ delay: 1 }}
         className="mt-8 flex flex-col gap-3 sm:flex-row"
       >
-        <Link to="/bookings">
-          <Button variant="default" size="lg" className="gap-2">
-            <Calendar className="h-4 w-4" />
+        <Button variant="default" size="lg" className="gap-2" onClick={handleDownloadReceipt}>
+          <Download className="h-4 w-4" />
+          Download Receipt
+        </Button>
+        <Link to="/profile">
+          <Button variant="outline" size="lg" className="gap-2">
             View Bookings
             <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
         <Link to="/">
-          <Button variant="outline" size="lg" className="gap-2">
+          <Button variant="ghost" size="lg" className="gap-2">
             <Home className="h-4 w-4" />
             Go Home
           </Button>

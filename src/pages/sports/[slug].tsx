@@ -2,8 +2,9 @@ import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Trophy, Target, Zap, Activity, HelpCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { SPORTS } from '@/lib/constants'
-import { mockVenues, mockEvents } from '@/services/mock'
+import { getVenuesBySport, getEventsBySport } from '@/services/db'
 import { Section, SectionHeader, Button, EmptyState } from '@/components/ui'
 import { VenueCard } from '@/components/venue-card'
 import { EventCard } from '@/components/event-card'
@@ -18,15 +19,14 @@ const GRADIENTS: Record<string, string> = {
 }
 
 function SportIcon({ sport, className }: { sport: (typeof SPORTS)[number]; className?: string }) {
-  // FIXED: Safely look up components using a resolution dictionary instead of casting raw strings directly
   const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     Football: Trophy,
     Target: Target,
-    Badminton: Activity, 
+    Badminton: Activity,
     Zap: Zap,
     Activity: Activity
   }
-  
+
   const IconComponent = iconMap[sport.icon] || HelpCircle
   return <IconComponent className={className} />
 }
@@ -34,6 +34,18 @@ function SportIcon({ sport, className }: { sport: (typeof SPORTS)[number]; class
 export default function SportDetailPage() {
   const { slug } = useParams()
   const sport = SPORTS.find((s) => s.slug === slug)
+
+  const { data: venues = [] } = useQuery({
+    queryKey: ['venues', slug],
+    queryFn: () => getVenuesBySport(slug!),
+    enabled: !!slug,
+  })
+
+  const { data: events = [] } = useQuery({
+    queryKey: ['events', slug],
+    queryFn: () => getEventsBySport(slug!),
+    enabled: !!slug,
+  })
 
   if (!sport) {
     const fallbackIcon = Trophy as unknown as LucideIcon
@@ -51,14 +63,10 @@ export default function SportDetailPage() {
     )
   }
 
-  const venues = mockVenues.filter((v) => v.sport === sport.slug)
-  const events = mockEvents.filter((e) => e.sport === sport.slug)
-
-  // Fallback safe components for EmptyState tracking hooks
   const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     Football: Trophy,
     Target: Target,
-    Badminton: Activity, 
+    Badminton: Activity,
     Zap: Zap,
     Activity: Activity
   }
@@ -92,7 +100,7 @@ export default function SportDetailPage() {
                 <p className="mt-4 text-lg font-medium text-accent">{sport.tagline}</p>
                 <p className="mt-4 max-w-xl text-base text-zinc-300">{sport.description}</p>
               </div>
-              
+
               <div className="flex shrink-0 flex-col gap-3 sm:flex-row w-full sm:w-auto">
                 <Button
                   asChild
@@ -185,7 +193,6 @@ export default function SportDetailPage() {
               className="card rounded-2xl border border-ink/5 p-6 dark:border-surface/10"
             >
               <p className="text-sm text-muted">{stat.label}</p>
-              {/* FIXED: Injected explicit text-ink foreground utility class */}
               <p className="mt-1 font-heading text-2xl font-semibold text-ink">{stat.value}</p>
             </motion.div>
           ))}

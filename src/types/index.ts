@@ -1,5 +1,6 @@
 export interface User {
   id: string
+  uid?: string
   name: string
   email: string
   photo?: string
@@ -37,6 +38,12 @@ export interface Booking {
   price: number
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
   createdAt: string
+  paymentId?: string
+  orderId?: string
+  paymentSignature?: string
+  paymentMethod?: string
+  playerEmails?: string[]
+  players?: number
 }
 
 export interface Event {

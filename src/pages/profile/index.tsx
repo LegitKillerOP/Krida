@@ -16,32 +16,19 @@ import {
   CreditCard,
   ArrowUpRight,
   ArrowDownRight,
+  Download,
+  LogOut,
 } from 'lucide-react'
 import * as Tabs from '@radix-ui/react-tabs'
-import { useAuth } from '@/store/auth'
-import { mockVenues, mockEvents } from '@/services/mock'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth, logout } from '@/store/auth'
+import { getBookingsByUser, getVenues, getEvents } from '@/services/db'
 import { formatPrice, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui'
-import type { User as UserType } from '@/types'
-
-const mockBookings = [
-  { id: 'b_001', userId: 'u_001', venueId: 'v_001', date: '2026-07-05', slot: '06:00 PM', hours: 2, price: 2400, status: 'confirmed' as const, createdAt: '2026-06-28T10:00:00Z' },
-  { id: 'b_002', userId: 'u_001', venueId: 'v_003', date: '2026-07-03', slot: '07:00 PM', hours: 1, price: 600, status: 'confirmed' as const, createdAt: '2026-06-25T14:00:00Z' },
-  { id: 'b_003', userId: 'u_001', venueId: 'v_002', date: '2026-06-20', slot: '04:00 PM', hours: 2, price: 2000, status: 'completed' as const, createdAt: '2026-06-18T09:00:00Z' },
-  { id: 'b_004', userId: 'u_001', venueId: 'v_004', date: '2026-07-08', slot: '05:00 PM', hours: 1, price: 800, status: 'pending' as const, createdAt: '2026-06-26T16:00:00Z' },
-  { id: 'b_005', userId: 'u_001', venueId: 'v_006', date: '2026-06-15', slot: '06:00 PM', hours: 1, price: 1400, status: 'cancelled' as const, createdAt: '2026-06-12T11:00:00Z' },
-]
-
-const transactions = [
-  { id: 't_001', type: 'credit', amount: 500, description: 'Cashback refund', date: '2026-06-25' },
-  { id: 't_002', type: 'debit', amount: 1200, description: 'Elite Turf booking', date: '2026-06-24' },
-  { id: 't_003', type: 'credit', amount: 2000, description: 'Wallet top-up', date: '2026-06-20' },
-  { id: 't_004', type: 'debit', amount: 600, description: 'Smash Arena booking', date: '2026-06-18' },
-  { id: 't_005', type: 'debit', amount: 1400, description: 'Goal Zone Turf booking', date: '2026-06-15' },
-]
+import type { User as UserType, Booking, Venue, Event } from '@/types'
 
 const tabs = [
   { value: 'profile', label: 'Profile', icon: User },
@@ -59,18 +46,37 @@ export default function ProfilePage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
 
+  const { data: allBookings = [] } = useQuery({
+    queryKey: ['bookings', user?.id],
+    queryFn: () => (user?.id ? getBookingsByUser(user.id) : Promise.resolve([])),
+    enabled: !!user,
+  })
+
+  const { data: venues = [] } = useQuery({
+    queryKey: ['venues'],
+    queryFn: getVenues,
+  })
+
+  const { data: events = [] } = useQuery({
+    queryKey: ['events'],
+    queryFn: getEvents,
+  })
+
   const getVenueName = (venueId: string) => {
-    return mockVenues.find((v) => v.id === venueId)?.name ?? 'Unknown Venue'
+    return venues.find((v) => v.id === venueId)?.name ?? 'Unknown Venue'
   }
 
-  const upcomingBookings = mockBookings.filter((b) => b.status === 'confirmed' || b.status === 'pending')
-  const pastBookings = mockBookings.filter((b) => b.status === 'completed' || b.status === 'cancelled')
+  const userBookings = allBookings.filter((b) => b.userId === user?.id)
+  const upcomingBookings = userBookings.filter((b) => b.status === 'confirmed' || b.status === 'pending')
+  const pastBookings = userBookings.filter((b) => b.status === 'completed' || b.status === 'cancelled')
+  const joinedEvents = events.filter((e) => e.participants?.includes(user?.id ?? ''))
+  const savedVenues = venues.slice(0, 3)
 
   return (
     <div className="min-h-[calc(100vh-80px)] px-4 py-12 sm:px-8 lg:px-12 bg-surface text-ink dark:bg-ink dark:text-surface">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col gap-8 lg:flex-row">
-          
+
           {/* Sidebar - Desktop Only */}
           <aside className="hidden w-64 shrink-0 lg:block">
             <nav className="sticky top-24 space-y-1">
@@ -91,6 +97,19 @@ export default function ProfilePage() {
                   </button>
                 )
               })}
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    window.location.href = '/'
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </div>
             </nav>
           </aside>
 
@@ -125,7 +144,7 @@ export default function ProfilePage() {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                {renderTabContent(activeTab, user, getVenueName, upcomingBookings, pastBookings)}
+                {renderTabContent(activeTab, user, getVenueName, upcomingBookings, pastBookings, joinedEvents, savedVenues, userBookings, venues)}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -140,26 +159,30 @@ function renderTabContent(
   tab: string,
   user: UserType | null,
   getVenueName: (id: string) => string,
-  upcomingBookings: typeof mockBookings,
-  pastBookings: typeof mockBookings,
+  upcomingBookings: Booking[],
+  pastBookings: Booking[],
+  joinedEvents: Event[],
+  savedVenues: Venue[],
+  allBookings: Booking[],
+  venues: Venue[],
 ) {
   switch (tab) {
     case 'profile':
-      return <ProfileTab user={user} />
+      return <ProfileTab user={user} bookings={allBookings} />
     case 'bookings':
-      return <BookingsTab bookings={mockBookings} getVenueName={getVenueName} />
+      return <BookingsTab bookings={allBookings} venues={venues} user={user} />
     case 'upcoming':
       return <UpcomingTab bookings={upcomingBookings} getVenueName={getVenueName} />
     case 'past':
       return <PastTab bookings={pastBookings} getVenueName={getVenueName} />
     case 'wallet':
-      return <WalletTab />
+      return <WalletTab bookings={allBookings} />
     case 'joined':
-      return <JoinedEventsTab />
+      return <JoinedEventsTab events={joinedEvents} />
     case 'hosted':
       return <HostedEventsTab />
     case 'saved':
-      return <SavedVenuesTab />
+      return <SavedVenuesTab venues={savedVenues} />
     case 'settings':
       return <SettingsTab user={user} />
     default:
@@ -167,7 +190,7 @@ function renderTabContent(
   }
 }
 
-function ProfileTab({ user }: { user: UserType | null }) {
+function ProfileTab({ user, bookings }: { user: UserType | null; bookings: Booking[] }) {
   return (
     <div className="space-y-6">
       <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">Profile</h1>
@@ -183,7 +206,6 @@ function ProfileTab({ user }: { user: UserType | null }) {
             )}
           </div>
           <div className="text-center sm:text-left">
-            {/* FIXED: Locked card typography strings into hard absolute dark shades */}
             <h2 className="font-heading text-2xl font-semibold text-neutral-900">
               {user?.name ?? 'User'}
             </h2>
@@ -204,15 +226,19 @@ function ProfileTab({ user }: { user: UserType | null }) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="card p-6 text-center">
-          <p className="font-heading text-3xl font-bold text-neutral-900">12</p>
+          <p className="font-heading text-3xl font-bold text-neutral-900">{bookings.length}</p>
           <p className="text-sm text-neutral-500">Total Bookings</p>
         </div>
         <div className="card p-6 text-center">
-          <p className="font-heading text-3xl font-bold text-neutral-900">3</p>
-          <p className="text-sm text-neutral-500">Events Joined</p>
+          <p className="font-heading text-3xl font-bold text-neutral-900">
+            {bookings.filter((b) => b.status === 'completed').length}
+          </p>
+          <p className="text-sm text-neutral-500">Completed</p>
         </div>
         <div className="card p-6 text-center">
-          <p className="font-heading text-3xl font-bold text-neutral-900">8</p>
+          <p className="font-heading text-3xl font-bold text-neutral-900">
+            {bookings.reduce((sum, b) => sum + b.hours, 0)}
+          </p>
           <p className="text-sm text-neutral-500">Hours Played</p>
         </div>
       </div>
@@ -222,47 +248,166 @@ function ProfileTab({ user }: { user: UserType | null }) {
 
 function BookingsTab({
   bookings,
-  getVenueName,
+  venues,
+  user,
 }: {
-  bookings: typeof mockBookings
-  getVenueName: (id: string) => string
+  bookings: Booking[]
+  venues: Venue[]
+  user: UserType | null
 }) {
+  const [filter, setFilter] = useState<'all' | 'confirmed' | 'pending' | 'cancelled' | 'completed'>('all')
+
+  const getVenueNameLocal = (venueId: string) => {
+    return venues.find((v) => v.id === venueId)?.name ?? 'Unknown Venue'
+  }
+
+  const filtered = filter === 'all'
+    ? bookings
+    : bookings.filter((b) => b.status === filter)
+
+  const statusCounts = {
+    all: bookings.length,
+    confirmed: bookings.filter((b) => b.status === 'confirmed').length,
+    pending: bookings.filter((b) => b.status === 'pending').length,
+    cancelled: bookings.filter((b) => b.status === 'cancelled').length,
+    completed: bookings.filter((b) => b.status === 'completed').length,
+  }
+
+  function handleDownloadReceipt(booking: Booking) {
+    const venue = venues.find((v) => v.id === booking.venueId)
+    if (!venue || !user) return
+    const text = `
+════════════════════════════════════════════════
+              KRIDA — BOOKING RECEIPT
+════════════════════════════════════════════════
+
+Booking ID:    ${booking.id}
+Date:          ${formatDate(booking.createdAt)}
+
+─── PLAYER ────────────────────────────────────
+Name:          ${user.name}
+Email:         ${user.email}
+
+─── VENUE ─────────────────────────────────────
+Venue:         ${venue.name}
+Sport:         ${venue.sport.charAt(0).toUpperCase() + venue.sport.slice(1)}
+Address:       ${venue.address}, ${venue.city}
+
+─── BOOKING DETAILS ───────────────────────────
+Date:          ${formatDate(booking.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+Time:          ${booking.slot}
+Duration:      ${booking.hours} hour${booking.hours > 1 ? 's' : ''}
+Players:       ${booking.players ?? 1}
+
+─── PAYMENT ───────────────────────────────────
+Amount:        ${formatPrice(booking.price)}
+Payment ID:    ${booking.paymentId ?? 'N/A'}
+Status:        ${booking.status.toUpperCase()}
+
+────────────────────────────────────────────────
+Thank you for booking with KRIDA!
+For support: support@krida.app
+════════════════════════════════════════════════
+`
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `KRIDA-Receipt-${booking.id}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6">
-      <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">My Bookings</h1>
-      <div className="space-y-3">
-        {bookings.map((booking) => (
-          <div key={booking.id} className="card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              {/* FIXED: Shifted card text arrays down to safe, high-contrast dark bounds */}
-              <h3 className="font-medium text-neutral-900">
-                {getVenueName(booking.venueId)}
-              </h3>
-              <p className="text-sm text-neutral-500">
-                {formatDate(booking.date)} at {booking.slot}
-              </p>
-            </div>
-            <div className="flex items-center gap-4 justify-between sm:justify-end">
-              <p className="font-heading font-semibold text-neutral-900">
-                {formatPrice(booking.price)}
-              </p>
-              <Badge
-                variant={
-                  booking.status === 'confirmed'
-                    ? 'success'
-                    : booking.status === 'pending'
-                      ? 'warning'
-                      : booking.status === 'cancelled'
-                        ? 'danger'
-                        : 'default'
-                }
-              >
-                {booking.status}
-              </Badge>
-            </div>
-          </div>
+      <div className="flex items-center justify-between">
+        <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">My Bookings</h1>
+        <span className="text-sm text-muted">{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 overflow-x-auto rounded-xl bg-ink/5 p-1 dark:bg-surface/5">
+        {(['all', 'confirmed', 'pending', 'completed', 'cancelled'] as const).map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setFilter(status)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium capitalize transition-colors ${
+              filter === status
+                ? 'bg-surface text-ink shadow-sm dark:bg-ink dark:text-surface'
+                : 'text-muted hover:text-ink dark:hover:text-surface'
+            }`}
+          >
+            {status}
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+              filter === status
+                ? 'bg-accent/20 text-accent'
+                : 'bg-ink/5 text-muted dark:bg-surface/10'
+            }`}>
+              {statusCounts[status]}
+            </span>
+          </button>
         ))}
       </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Calendar} title="No bookings found" description={filter === 'all' ? 'Book a venue to get started!' : `No ${filter} bookings.`} />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((booking) => {
+            const venue = venues.find((v) => v.id === booking.venueId)
+            return (
+              <div key={booking.id} className="card p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-medium text-neutral-900">
+                        {getVenueNameLocal(booking.venueId)}
+                      </h3>
+                      <Badge
+                        variant={
+                          booking.status === 'confirmed'
+                            ? 'success'
+                            : booking.status === 'pending'
+                              ? 'warning'
+                              : booking.status === 'cancelled'
+                                ? 'danger'
+                                : 'default'
+                        }
+                      >
+                        {booking.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-neutral-500">
+                      <span>{formatDate(booking.date)}</span>
+                      <span>{booking.slot}</span>
+                      <span>{booking.hours}h</span>
+                      <span>{booking.players ?? 1} player{(booking.players ?? 1) > 1 ? 's' : ''}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-400 font-mono">{booking.id}</p>
+                  </div>
+                  <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-2">
+                    <p className="font-heading font-semibold text-neutral-900">
+                      {formatPrice(booking.price)}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                      onClick={() => handleDownloadReceipt(booking)}
+                    >
+                      <Download className="h-3 w-3" />
+                      Receipt
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -271,7 +416,7 @@ function UpcomingTab({
   bookings,
   getVenueName,
 }: {
-  bookings: typeof mockBookings
+  bookings: Booking[]
   getVenueName: (id: string) => string
 }) {
   return (
@@ -306,7 +451,7 @@ function PastTab({
   bookings,
   getVenueName,
 }: {
-  bookings: typeof mockBookings
+  bookings: Booking[]
   getVenueName: (id: string) => string
 }) {
   return (
@@ -340,13 +485,28 @@ function PastTab({
   )
 }
 
-function WalletTab() {
-  const balance = 1250
+function WalletTab({ bookings }: { bookings: Booking[] }) {
+  const totalSpent = bookings
+    .filter((b) => b.status === 'completed' || b.status === 'confirmed')
+    .reduce((sum, b) => sum + b.price, 0)
+  const balance = 2500 - totalSpent
+
+  const transactions = bookings
+    .filter((b) => b.status !== 'cancelled')
+    .map((b) => ({
+      id: b.id,
+      type: 'debit' as const,
+      amount: b.price,
+      description: `Booking ${b.id}`,
+      date: b.date,
+    }))
+    .reverse()
+    .slice(0, 5)
+
   return (
     <div className="space-y-6">
       <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">Wallet</h1>
 
-      {/* Balance card remains distinct with structural background definition */}
       <div className="card bg-neutral-950 p-8 text-white">
         <div className="flex items-start justify-between">
           <div>
@@ -372,76 +532,67 @@ function WalletTab() {
       <h2 className="font-heading text-xl font-semibold text-ink dark:text-surface">
         Transaction History
       </h2>
-      <div className="space-y-2">
-        {transactions.map((tx) => (
-          <div key={tx.id} className="card flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  tx.type === 'credit'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-red-100 text-red-600'
-                }`}
-              >
-                {tx.type === 'credit' ? (
-                  <ArrowDownRight className="h-4 w-4" />
-                ) : (
+      {transactions.length === 0 ? (
+        <EmptyState icon={Wallet} title="No transactions" description="Your transactions will appear here." />
+      ) : (
+        <div className="space-y-2">
+          {transactions.map((tx) => (
+            <div key={tx.id} className="card flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600">
                   <ArrowUpRight className="h-4 w-4" />
-                )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-neutral-900">{tx.description}</p>
+                  <p className="text-xs text-neutral-500">{formatDate(tx.date)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-neutral-900">{tx.description}</p>
-                <p className="text-xs text-neutral-500">{formatDate(tx.date)}</p>
-              </div>
+              <p className="font-heading font-semibold text-red-600">
+                -{formatPrice(tx.amount)}
+              </p>
             </div>
-            <p
-              className={`font-heading font-semibold ${
-                tx.type === 'credit'
-                  ? 'text-emerald-600'
-                  : 'text-red-600'
-              }`}
-            >
-              {tx.type === 'credit' ? '+' : '-'}{formatPrice(tx.amount)}
-            </p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-function JoinedEventsTab() {
-  const joinedEvents = mockEvents.slice(0, 2)
+function JoinedEventsTab({ events }: { events: Event[] }) {
   return (
     <div className="space-y-6">
       <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">Joined Events</h1>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {joinedEvents.map((event) => (
-          <div key={event.id} className="card overflow-hidden flex flex-col">
-            <div className="aspect-video w-full overflow-hidden bg-neutral-100">
-              <img
-                src={event.image}
-                alt={event.title}
-                className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-              />
-            </div>
-            <div className="p-5 flex-1 flex flex-col justify-between">
-              <div>
-                <h3 className="font-heading font-semibold text-neutral-900">
-                  {event.title}
-                </h3>
-                <p className="mt-1 text-sm text-neutral-500">
-                  {formatDate(event.date)} at {event.time}
-                </p>
-                <p className="text-sm text-neutral-500">{event.venue}</p>
+      {events.length === 0 ? (
+        <EmptyState icon={Users} title="No joined events" description="Events you join will appear here." />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {events.map((event) => (
+            <div key={event.id} className="card overflow-hidden flex flex-col">
+              <div className="aspect-video w-full overflow-hidden bg-neutral-100">
+                <img
+                  src={event.image}
+                  alt={event.title}
+                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                />
               </div>
-              <Badge variant="success" className="mt-3 w-fit">
-                {event.status}
-              </Badge>
+              <div className="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-heading font-semibold text-neutral-900">
+                    {event.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    {formatDate(event.date)} at {event.time}
+                  </p>
+                  <p className="text-sm text-neutral-500">{event.venue}</p>
+                </div>
+                <Badge variant="success" className="mt-3 w-fit">
+                  {event.status}
+                </Badge>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -460,37 +611,40 @@ function HostedEventsTab() {
   )
 }
 
-function SavedVenuesTab() {
-  const saved = mockVenues.slice(0, 3)
+function SavedVenuesTab({ venues }: { venues: Venue[] }) {
   return (
     <div className="space-y-6">
       <h1 className="font-heading text-3xl font-semibold text-ink dark:text-surface">Saved Venues</h1>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {saved.map((venue) => (
-          <div key={venue.id} className="card overflow-hidden">
-            <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-100">
-              <img
-                src={venue.images[0]}
-                alt={venue.name}
-                className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-              />
+      {venues.length === 0 ? (
+        <EmptyState icon={Heart} title="No saved venues" description="Venues you save will appear here." />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {venues.map((venue) => (
+            <div key={venue.id} className="card overflow-hidden">
+              <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-100">
+                <img
+                  src={venue.images?.[0]}
+                  alt={venue.name}
+                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                />
+              </div>
+              <div className="p-4">
+                <h3 className="font-heading font-semibold text-neutral-900">
+                  {venue.name}
+                </h3>
+                <p className="mt-1 flex items-center gap-1 text-sm text-neutral-500">
+                  <MapPin className="h-3 w-3" />
+                  {venue.city}
+                </p>
+                <p className="mt-2 font-heading font-semibold text-neutral-900">
+                  {formatPrice(venue.price)}
+                  <span className="text-sm font-normal text-neutral-500"> / hour</span>
+                </p>
+              </div>
             </div>
-            <div className="p-4">
-              <h3 className="font-heading font-semibold text-neutral-900">
-                {venue.name}
-              </h3>
-              <p className="mt-1 flex items-center gap-1 text-sm text-neutral-500">
-                <MapPin className="h-3 w-3" />
-                {venue.city}
-              </p>
-              <p className="mt-2 font-heading font-semibold text-neutral-900">
-                {formatPrice(venue.price)}
-                <span className="text-sm font-normal text-neutral-500"> / hour</span>
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

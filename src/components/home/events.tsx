@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
 import { Clock, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Section, SectionHeader, Badge } from '@/components/ui'
-import { mockEvents } from '@/services/mock'
+import { getEvents } from '@/services/db'
 import { formatPrice, formatDate } from '@/lib/utils'
 
 const container = {
@@ -15,7 +16,14 @@ const item = {
 }
 
 export function Events() {
-  const events = mockEvents.slice(0, 4)
+  const { data: events = [] } = useQuery({
+    queryKey: ['home-events'],
+    queryFn: getEvents,
+  })
+
+  const displayEvents = events
+    .filter((e) => e.status === 'upcoming' || e.status === 'full')
+    .slice(0, 4)
 
   return (
     <Section id="events">
@@ -34,7 +42,7 @@ export function Events() {
         {/* Timeline line */}
         <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-ink/10 dark:bg-surface/10 sm:block" />
 
-        {events.map((event) => {
+        {displayEvents.map((event) => {
           const date = new Date(event.date)
           const day = date.toLocaleDateString('en-IN', { day: '2-digit' })
           const month = date.toLocaleDateString('en-IN', { month: 'short' }).toUpperCase()

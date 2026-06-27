@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Calendar, Clock, Users, MapPin, User } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SPORTS } from '@/lib/constants'
-import { mockEvents, mockUser } from '@/services/mock'
+import { getEventById, joinEvent, leaveEvent } from '@/services/db'
+import { useAuth } from '@/store/auth'
 import { Section, SectionHeader, Badge, Button, EmptyState } from '@/components/ui'
 import { cn, formatPrice, formatDate } from '@/lib/utils'
 
@@ -14,8 +16,36 @@ const SPORT_BY_SLUG = SPORTS.reduce<Record<string, (typeof SPORTS)[number]>>((ac
 
 export default function EventDetailPage() {
   const { id } = useParams()
-  const event = mockEvents.find((e) => e.id === id)
-  const [joined, setJoined] = useState(() => event?.participants.includes(mockUser.id) ?? false)
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data: event, isLoading } = useQuery({
+    queryKey: ['event', id],
+    queryFn: () => getEventById(id!),
+    enabled: !!id,
+  })
+
+  const joined = event?.participants?.includes(user?.id ?? '') ?? false
+
+  const joinMutation = useMutation({
+    mutationFn: () => joinEvent(id!, user!.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event', id] }),
+  })
+
+  const leaveMutation = useMutation({
+    mutationFn: () => leaveEvent(id!, user!.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['event', id] }),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="pb-24">
+        <Section className="pt-32">
+          <div className="h-96 animate-pulse rounded-3xl bg-ink/5 dark:bg-surface/5" />
+        </Section>
+      </div>
+    )
+  }
 
   if (!event) {
     return (
@@ -33,9 +63,9 @@ export default function EventDetailPage() {
   }
 
   const sport = SPORT_BY_SLUG[event.sport]
-  const isFull = event.status === 'full' || event.slots >= event.maxSlots
+  const isFull = event.status === 'full' || (event.slots ?? 0) >= (event.maxSlots ?? 0)
   const isCompleted = event.status === 'completed' || event.status === 'cancelled'
-  const canJoin = !isFull && !isCompleted
+  const canJoin = !isFull && !isCompleted && user
 
   return (
     <div className="pb-32 lg:pb-24">
@@ -63,8 +93,8 @@ export default function EventDetailPage() {
             <div className="relative h-48 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-700 sm:h-64">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(124,255,77,0.15),transparent_50%)]" />
               <div className="absolute bottom-6 left-6 right-6 flex flex-wrap items-center gap-2">
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   style={{ color: 'var(--color-surface)', borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(10,10,10,0.3)' }}
                   className="backdrop-blur"
                 >
@@ -76,7 +106,6 @@ export default function EventDetailPage() {
             </div>
 
             <div className="p-6 sm:p-8">
-              {/* FIXED: Swapped out conflicting classes for direct token variable style mappings */}
               <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-4xl" style={{ color: 'var(--color-ink)' }}>
                 {event.title}
               </h1>
@@ -92,7 +121,6 @@ export default function EventDetailPage() {
                     <row.icon className="h-5 w-5 text-accent" />
                     <div>
                       <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{row.label}</p>
-                      {/* FIXED: Forced active native variable mapping for data strings */}
                       <p className="text-sm font-medium" style={{ color: 'var(--color-ink)' }}>{row.value}</p>
                     </div>
                   </div>
@@ -102,7 +130,6 @@ export default function EventDetailPage() {
               <div className="mt-6 flex items-center justify-between border-t pt-5 border-neutral-200 dark:border-neutral-800">
                 <div>
                   <p className="text-xs" style={{ color: 'var(--color-muted)' }}>Entry fee</p>
-                  {/* FIXED: Replaced standard dark utilities with variable inheritance to prevent white-on-white text */}
                   <p className="font-heading text-2xl font-bold" style={{ color: 'var(--color-ink)' }}>
                     {event.fee === 0 ? 'Free' : formatPrice(event.fee)}
                   </p>
@@ -111,7 +138,8 @@ export default function EventDetailPage() {
                   <Button
                     variant={joined ? 'outline' : 'accent'}
                     size="lg"
-                    onClick={() => setJoined((j) => !j)}
+                    onClick={() => joined ? leaveMutation.mutate() : joinMutation.mutate()}
+                    disabled={joinMutation.isPending || leaveMutation.isPending}
                   >
                     {joined ? 'Leave event' : 'Join event'}
                   </Button>
@@ -128,9 +156,9 @@ export default function EventDetailPage() {
           </Section>
 
           <div>
-            <SectionHeader eyebrow="Participants" title={`Players (${event.participants.length})`} align="left" />
+            <SectionHeader eyebrow="Participants" title={`Players (${event.participants?.length ?? 0})`} align="left" />
             <div className="mt-4 flex flex-wrap gap-2">
-              {event.participants.slice(0, 12).map((pid, i) => (
+              {(event.participants ?? []).slice(0, 12).map((pid, i) => (
                 <div
                   key={pid}
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold bg-neutral-100 dark:bg-neutral-800"
@@ -140,9 +168,9 @@ export default function EventDetailPage() {
                   {pid.replace('u_', 'P')}
                 </div>
               ))}
-              {event.participants.length > 12 && (
+              {(event.participants?.length ?? 0) > 12 && (
                 <div className="flex h-10 items-center rounded-full px-3 text-sm font-medium bg-neutral-100 dark:bg-neutral-800" style={{ color: 'var(--color-ink)' }}>
-                  +{event.participants.length - 12} more
+                  +{(event.participants?.length ?? 0) - 12} more
                 </div>
               )}
             </div>
@@ -197,7 +225,8 @@ export default function EventDetailPage() {
                 variant={joined ? 'outline' : 'accent'}
                 size="lg"
                 className="mt-6 w-full text-black"
-                onClick={() => setJoined((j) => !j)}
+                onClick={() => joined ? leaveMutation.mutate() : joinMutation.mutate()}
+                disabled={joinMutation.isPending || leaveMutation.isPending}
               >
                 {joined ? 'Leave event' : 'Join event'}
               </Button>
@@ -214,7 +243,6 @@ export default function EventDetailPage() {
         >
           <div className="flex items-center justify-between gap-4">
             <div>
-              {/* FIXED: Explicitly map native variable variables here for absolute view state sync */}
               <p className="font-heading text-lg font-semibold" style={{ color: 'var(--color-ink)' }}>
                 {event.fee === 0 ? 'Free' : formatPrice(event.fee)}
               </p>
@@ -225,7 +253,8 @@ export default function EventDetailPage() {
             <Button
               variant={joined ? 'outline' : 'accent'}
               size="lg"
-              onClick={() => setJoined((j) => !j)}
+              onClick={() => joined ? leaveMutation.mutate() : joinMutation.mutate()}
+              disabled={joinMutation.isPending || leaveMutation.isPending}
             >
               {joined ? 'Leave' : 'Join event'}
             </Button>
