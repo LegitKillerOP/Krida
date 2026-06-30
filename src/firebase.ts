@@ -14,15 +14,6 @@ const firebaseConfig = {
   databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
 };
 
-// Debug: log config in development (remove in production)
-if (import.meta.env.DEV) {
-  console.log('[Firebase Config]', {
-    apiKey: firebaseConfig.apiKey ? '***' + firebaseConfig.apiKey.slice(-6) : 'MISSING',
-    authDomain: firebaseConfig.authDomain || 'MISSING',
-    projectId: firebaseConfig.projectId || 'MISSING',
-    databaseURL: firebaseConfig.databaseURL || 'MISSING',
-  })
-}
 
 // Initialize Firebase — let it fail loudly if config is invalid
 const app = initializeApp(firebaseConfig);

@@ -9,7 +9,6 @@ import {
   orderByChild,
   equalTo,
   limitToFirst,
-  serverTimestamp,
 } from 'firebase/database'
 import type { Venue, Event, Booking, Review, User } from '@/types'
 
@@ -71,6 +70,27 @@ export async function joinEvent(eventId: string, userId: string): Promise<void> 
   }
 }
 
+export async function bookSlots(eventId: string, userId: string, slots: number): Promise<void> {
+  const eventRef = ref(database, `events/${eventId}`)
+  const snapshot = await get(eventRef)
+  if (!snapshot.exists()) return
+  const event = snapshot.val() as Event
+  const participants = event.participants ?? []
+
+  // Add user to participants if not already joined
+  if (!participants.includes(userId)) {
+    participants.push(userId)
+  }
+
+  // Decrease available slots by the booked amount
+  const newSlots = Math.max(0, (event.slots ?? 0) - slots)
+
+  // Update status if full
+  const status = newSlots <= 0 ? 'full' : event.status
+
+  await update(eventRef, { participants, slots: newSlots, status })
+}
+
 export async function leaveEvent(eventId: string, userId: string): Promise<void> {
   const eventRef = ref(database, `events/${eventId}`)
   const snapshot = await get(eventRef)
@@ -89,11 +109,13 @@ export async function createBooking(booking: Omit<Booking, 'id'>): Promise<strin
 }
 
 export async function getBookingsByUser(userId: string): Promise<Booking[]> {
-  const q = query(ref(database, 'bookings'), orderByChild('userId'), equalTo(userId))
-  const snapshot = await get(q)
+  // Fetch all bookings and filter client-side (avoids index requirement)
+  const snapshot = await get(ref(database, 'bookings'))
   if (!snapshot.exists()) return []
   const data = snapshot.val()
-  return Object.entries(data).map(([id, value]) => ({ ...(value as Booking), id }))
+  return Object.entries(data)
+    .map(([id, value]) => ({ ...(value as Booking), id }))
+    .filter((b) => b.userId === userId)
 }
 
 export async function getAllBookings(): Promise<Booking[]> {

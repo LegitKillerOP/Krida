@@ -43,7 +43,7 @@ const itemVariants = {
 const tabItems = [
   { value: 'overview', label: 'Overview', icon: LayoutDashboard },
   { value: 'venues', label: 'Venues', icon: Building2 },
-  { value: 'events', label: 'Events', icon: CalendarDays },
+  { value: 'tournaments', label: 'Tournaments', icon: CalendarDays },
   { value: 'users', label: 'Users', icon: UsersRound },
 ]
 
@@ -93,8 +93,8 @@ export default function AdminPage() {
             <Tabs.Content value="venues">
               <VenuesTab />
             </Tabs.Content>
-            <Tabs.Content value="events">
-              <EventsTab />
+            <Tabs.Content value="tournaments">
+              <TournamentsTab />
             </Tabs.Content>
             <Tabs.Content value="users">
               <UsersTab />
@@ -439,9 +439,9 @@ function VenueForm({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ─── Events Tab ───────────────────────────────────────────────────────────────
+// ─── Tournaments Tab ──────────────────────────────────────────────────────────
 
-function EventsTab() {
+function TournamentsTab() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -467,17 +467,17 @@ function EventsTab() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search events..."
+            placeholder="Search tournaments..."
             className="pl-10 text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-900"
           />
         </div>
         <Button variant="accent" onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" />
-          Add Event
+          Create Tournament
         </Button>
       </motion.div>
 
-      {showForm && <EventForm venues={venues} onClose={() => setShowForm(false)} />}
+      {showForm && <TournamentForm venues={venues} onClose={() => setShowForm(false)} />}
 
       <motion.div variants={itemVariants} className="card overflow-hidden">
         {filtered.length === 0 ? (
@@ -533,7 +533,7 @@ function EventsTab() {
   )
 }
 
-function EventForm({ venues, onClose }: { venues: Venue[]; onClose: () => void }) {
+function TournamentForm({ venues, onClose }: { venues: Venue[]; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [sport, setSport] = useState('football')
@@ -591,7 +591,7 @@ function EventForm({ venues, onClose }: { venues: Venue[]; onClose: () => void }
       className="card mb-6 p-6"
     >
       <div className="mb-5 flex items-center justify-between">
-        <h2 className="font-heading text-lg font-semibold text-ink dark:text-dark">Add New Event</h2>
+        <h2 className="font-heading text-lg font-semibold text-ink dark:text-dark">Create New Tournament</h2>
         <button type="button" onClick={onClose} className="rounded-full p-1 text-muted hover:bg-ink/5 dark:hover:bg-dark/10">
           <X className="h-5 w-5" />
         </button>
@@ -640,11 +640,17 @@ function EventForm({ venues, onClose }: { venues: Venue[]; onClose: () => void }
         </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-ink dark:text-dark">Description</label>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="About this event..." className="text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-900" />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="About this tournament..."
+            rows={3}
+            className="w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 dark:border-dark/10 dark:bg-neutral-900"
+          />
         </div>
         <div className="flex items-end gap-3 sm:col-span-2">
           <Button type="submit" variant="accent" disabled={loading}>
-            {loading ? 'Creating...' : 'Create Event'}
+            {loading ? 'Creating...' : 'Create Tournament'}
           </Button>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
         </div>

@@ -47,9 +47,12 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('profile')
 
   const { data: allBookings = [] } = useQuery({
-    queryKey: ['bookings', user?.id],
-    queryFn: () => (user?.id ? getBookingsByUser(user.id) : Promise.resolve([])),
-    enabled: !!user,
+    queryKey: ['bookings', user?.id ?? 'guest'],
+    queryFn: () => {
+      if (!user?.id) return Promise.resolve([])
+      return getBookingsByUser(user.id)
+    },
+    enabled: !!user?.id,
   })
 
   const { data: venues = [] } = useQuery({

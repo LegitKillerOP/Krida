@@ -46,8 +46,9 @@ export function Events() {
           const date = new Date(event.date)
           const day = date.toLocaleDateString('en-IN', { day: '2-digit' })
           const month = date.toLocaleDateString('en-IN', { month: 'short' }).toUpperCase()
-          const slotsLeft = event.maxSlots - event.participants.length
-          const slotsPercent = (event.participants.length / event.maxSlots) * 100
+          const participantCount = event.participants?.length ?? 0
+          const slotsLeft = event.maxSlots - participantCount
+          const slotsPercent = event.maxSlots > 0 ? (participantCount / event.maxSlots) * 100 : 0
 
           return (
             <motion.div
